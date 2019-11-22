@@ -14,6 +14,7 @@ extern uint32_t PAGE_TABLE_LATENCY, SWAP_LATENCY;
 #define IS_L1D  4
 #define IS_L2C  5
 #define IS_LLC  6
+#define IS_LLC4 7
 
 // INSTRUCTION TLB
 #define ITLB_SET 16
@@ -70,13 +71,22 @@ extern uint32_t PAGE_TABLE_LATENCY, SWAP_LATENCY;
 #define L2C_LATENCY 10  // 5 (L1I or L1D) + 10 = 15 cycles
 
 // LAST LEVEL CACHE
-#define LLC_SET NUM_CPUS*2048
+#define LLC_SET NUM_CPUS*1792
 #define LLC_WAY 16
 #define LLC_RQ_SIZE NUM_CPUS*L2C_MSHR_SIZE //48
 #define LLC_WQ_SIZE NUM_CPUS*L2C_MSHR_SIZE //48
 #define LLC_PQ_SIZE NUM_CPUS*32
 #define LLC_MSHR_SIZE NUM_CPUS*64
 #define LLC_LATENCY 20  // 5 (L1I or L1D) + 10 + 20 = 35 cycles
+
+// LAST LEVEL CACHE
+#define LLC4_SET NUM_CPUS*2048
+#define LLC4_WAY 16
+#define LLC4_RQ_SIZE NUM_CPUS*LLC_MSHR_SIZE //48
+#define LLC4_WQ_SIZE NUM_CPUS*LLC_MSHR_SIZE //48
+#define LLC4_PQ_SIZE NUM_CPUS*32
+#define LLC4_MSHR_SIZE NUM_CPUS*64
+#define LLC4_LATENCY 30  // 5 (L1I or L1D) + 10 + 20 = 35 cycles
 
 class CACHE : public MEMORY {
   public:
