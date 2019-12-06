@@ -14,6 +14,7 @@ extern uint32_t PAGE_TABLE_LATENCY, SWAP_LATENCY;
 #define IS_L1D  4
 #define IS_L2C  5
 #define IS_LLC  6
+#define IS_LLC4 7
 
 // INSTRUCTION TLB
 #define ITLB_SET 16
@@ -70,13 +71,22 @@ extern uint32_t PAGE_TABLE_LATENCY, SWAP_LATENCY;
 #define L2C_LATENCY 10  // 5 (L1I or L1D) + 10 = 15 cycles
 
 // LAST LEVEL CACHE
-#define LLC_SET NUM_CPUS*2048
-#define LLC_WAY 16
+#define LLC_SET NUM_CPUS*1536
+#define LLC_WAY 12
 #define LLC_RQ_SIZE NUM_CPUS*L2C_MSHR_SIZE //48
 #define LLC_WQ_SIZE NUM_CPUS*L2C_MSHR_SIZE //48
 #define LLC_PQ_SIZE NUM_CPUS*32
 #define LLC_MSHR_SIZE NUM_CPUS*64
 #define LLC_LATENCY 20  // 5 (L1I or L1D) + 10 + 20 = 35 cycles
+
+// LAST LEVEL CACHE
+#define LLC4_SET NUM_CPUS*2048
+#define LLC4_WAY 16
+#define LLC4_RQ_SIZE NUM_CPUS*LLC_MSHR_SIZE //48
+#define LLC4_WQ_SIZE NUM_CPUS*LLC_MSHR_SIZE //48
+#define LLC4_PQ_SIZE NUM_CPUS*32
+#define LLC4_MSHR_SIZE NUM_CPUS*64
+#define LLC4_LATENCY 30  // 5 (L1I or L1D) + 10 + 20 + 30 = 65 cycles
 
 class CACHE : public MEMORY {
   public:
@@ -191,12 +201,15 @@ class CACHE : public MEMORY {
     void add_mshr(PACKET *packet),
          update_fill_cycle(),
          llc_initialize_replacement(),
+         llc4_initialize_replacement(),
          update_replacement_state(uint32_t cpu, uint32_t set, uint32_t way, uint64_t full_addr, uint64_t ip, uint64_t victim_addr, uint32_t type, uint8_t hit),
          llc_update_replacement_state(uint32_t cpu, uint32_t set, uint32_t way, uint64_t full_addr, uint64_t ip, uint64_t victim_addr, uint32_t type, uint8_t hit),
+         llc4_update_replacement_state(uint32_t cpu, uint32_t set, uint32_t way, uint64_t full_addr, uint64_t ip, uint64_t victim_addr, uint32_t type, uint8_t hit),
          lru_update(uint32_t set, uint32_t way),
          fill_cache(uint32_t set, uint32_t way, PACKET *packet),
          replacement_final_stats(),
          llc_replacement_final_stats(),
+         llc4_replacement_final_stats(),
          //prefetcher_initialize(),
          l1d_prefetcher_initialize(),
          l2c_prefetcher_initialize(),
@@ -219,6 +232,7 @@ class CACHE : public MEMORY {
              get_way(uint64_t address, uint32_t set),
              find_victim(uint32_t cpu, uint64_t instr_id, uint32_t set, const BLOCK *current_set, uint64_t ip, uint64_t full_addr, uint32_t type),
              llc_find_victim(uint32_t cpu, uint64_t instr_id, uint32_t set, const BLOCK *current_set, uint64_t ip, uint64_t full_addr, uint32_t type),
+             llc4_find_victim(uint32_t cpu, uint64_t instr_id, uint32_t set, const BLOCK *current_set, uint64_t ip, uint64_t full_addr, uint32_t type),
              lru_victim(uint32_t cpu, uint64_t instr_id, uint32_t set, const BLOCK *current_set, uint64_t ip, uint64_t full_addr, uint32_t type);
 };
 

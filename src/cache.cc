@@ -23,17 +23,22 @@ void CACHE::handle_fill()
         uint32_t set = get_set(MSHR.entry[mshr_index].address), way;
         if (cache_type == IS_LLC) {
             way = llc_find_victim(fill_cpu, MSHR.entry[mshr_index].instr_id, set, block[set], MSHR.entry[mshr_index].ip, MSHR.entry[mshr_index].full_addr, MSHR.entry[mshr_index].type);
+        } else if (cache_type == IS_LLC4) {
+            way = llc4_find_victim(fill_cpu, MSHR.entry[mshr_index].instr_id, set, block[set], MSHR.entry[mshr_index].ip, MSHR.entry[mshr_index].full_addr, MSHR.entry[mshr_index].type);
         }
         else
             way = find_victim(fill_cpu, MSHR.entry[mshr_index].instr_id, set, block[set], MSHR.entry[mshr_index].ip, MSHR.entry[mshr_index].full_addr, MSHR.entry[mshr_index].type);
 
 #ifdef LLC_BYPASS
-        if ((cache_type == IS_LLC) && (way == LLC_WAY)) { // this is a bypass that does not fill the LLC
+        if ((cache_type == IS_LLC4) && (way == LLC4_WAY)) { // this is a bypass that does not fill the LLC
 
             // update replacement policy
             if (cache_type == IS_LLC) {
                 llc_update_replacement_state(fill_cpu, set, way, MSHR.entry[mshr_index].full_addr, MSHR.entry[mshr_index].ip, 0, MSHR.entry[mshr_index].type, 0);
 
+            }
+            else if (cache_type == IS_LLC4) {
+                llc4_update_replacement_state(fill_cpu, set, way, MSHR.entry[mshr_index].full_addr, MSHR.entry[mshr_index].ip, 0, MSHR.entry[mshr_index].type, 0);
             }
             else
                 update_replacement_state(fill_cpu, set, way, MSHR.entry[mshr_index].full_addr, MSHR.entry[mshr_index].ip, 0, MSHR.entry[mshr_index].type, 0);
@@ -69,7 +74,7 @@ void CACHE::handle_fill()
         uint8_t  do_fill = 1;
 
         // is this dirty?
-        if (block[set][way].dirty) {
+        if (block[set][way].dirty || (block[set][way].valid && cache_type == IS_LLC)) {
 
             // check if the lower level WQ has enough room to keep this writeback request
             if (lower_level) {
@@ -98,6 +103,9 @@ void CACHE::handle_fill()
                     writeback_packet.type = WRITEBACK;
                     writeback_packet.event_cycle = current_core_cycle[fill_cpu];
 
+                    if (cache_type == IS_LLC)
+                        writeback_packet.dirty = block[set][way].dirty;
+
                     lower_level->add_wq(&writeback_packet);
                 }
             }
@@ -125,10 +133,20 @@ void CACHE::handle_fill()
 									       block[set][way].address<<LOG2_BLOCK_SIZE, MSHR.entry[mshr_index].pf_metadata);
 		cpu = 0;
 	      }
+            if (cache_type == IS_LLC4)
+          {
+        cpu = fill_cpu;
+		MSHR.entry[mshr_index].pf_metadata = llc_prefetcher_cache_fill(MSHR.entry[mshr_index].address<<LOG2_BLOCK_SIZE, set, way, (MSHR.entry[mshr_index].type == PREFETCH) ? 1 : 0,
+									       block[set][way].address<<LOG2_BLOCK_SIZE, MSHR.entry[mshr_index].pf_metadata);
+		cpu = 0;
+          }
               
             // update replacement policy
             if (cache_type == IS_LLC) {
                 llc_update_replacement_state(fill_cpu, set, way, MSHR.entry[mshr_index].full_addr, MSHR.entry[mshr_index].ip, block[set][way].full_addr, MSHR.entry[mshr_index].type, 0);
+            }
+            else if (cache_type == IS_LLC4) {
+                llc4_update_replacement_state(fill_cpu, set, way, MSHR.entry[mshr_index].full_addr, MSHR.entry[mshr_index].ip, block[set][way].full_addr, MSHR.entry[mshr_index].type, 0);
             }
             else
                 update_replacement_state(fill_cpu, set, way, MSHR.entry[mshr_index].full_addr, MSHR.entry[mshr_index].ip, block[set][way].full_addr, MSHR.entry[mshr_index].type, 0);
@@ -209,6 +227,9 @@ void CACHE::handle_writeback()
             if (cache_type == IS_LLC) {
                 llc_update_replacement_state(writeback_cpu, set, way, block[set][way].full_addr, WQ.entry[index].ip, 0, WQ.entry[index].type, 1);
 
+            }
+            else if (cache_type == IS_LLC4) {
+                llc4_update_replacement_state(writeback_cpu, set, way, block[set][way].full_addr, WQ.entry[index].ip, 0, WQ.entry[index].type, 1);
             }
             else
                 update_replacement_state(writeback_cpu, set, way, block[set][way].full_addr, WQ.entry[index].ip, 0, WQ.entry[index].type, 1);
@@ -336,11 +357,14 @@ void CACHE::handle_writeback()
                 if (cache_type == IS_LLC) {
                     way = llc_find_victim(writeback_cpu, WQ.entry[index].instr_id, set, block[set], WQ.entry[index].ip, WQ.entry[index].full_addr, WQ.entry[index].type);
                 }
+                else if (cache_type == IS_LLC4) {
+                    way = llc4_find_victim(writeback_cpu, WQ.entry[index].instr_id, set, block[set], WQ.entry[index].ip, WQ.entry[index].full_addr, WQ.entry[index].type);
+                }
                 else
                     way = find_victim(writeback_cpu, WQ.entry[index].instr_id, set, block[set], WQ.entry[index].ip, WQ.entry[index].full_addr, WQ.entry[index].type);
 
 #ifdef LLC_BYPASS
-                if ((cache_type == IS_LLC) && (way == LLC_WAY)) {
+                if ((cache_type == IS_LLC4) && (way == LLC4_WAY)) {
                     cerr << "LLC bypassing for writebacks is not allowed!" << endl;
                     assert(0);
                 }
@@ -349,7 +373,7 @@ void CACHE::handle_writeback()
                 uint8_t  do_fill = 1;
 
                 // is this dirty?
-                if (block[set][way].dirty) {
+                if (block[set][way].dirty || (block[set][way].valid && cache_type == IS_LLC)) {
 
                     // check if the lower level WQ has enough room to keep this writeback request
                     if (lower_level) { 
@@ -378,6 +402,9 @@ void CACHE::handle_writeback()
                             writeback_packet.type = WRITEBACK;
                             writeback_packet.event_cycle = current_core_cycle[writeback_cpu];
 
+                            if (cache_type == IS_LLC)
+                                writeback_packet.dirty = block[set][way].dirty;
+
                             lower_level->add_wq(&writeback_packet);
                         }
                     }
@@ -404,10 +431,20 @@ void CACHE::handle_writeback()
 									       block[set][way].address<<LOG2_BLOCK_SIZE, WQ.entry[index].pf_metadata);
 			cpu = 0;
 		      }
+                     if (cache_type == IS_LLC4)
+		      {
+			cpu = writeback_cpu;
+			WQ.entry[index].pf_metadata =llc_prefetcher_cache_fill(WQ.entry[index].address<<LOG2_BLOCK_SIZE, set, way, 0,
+									       block[set][way].address<<LOG2_BLOCK_SIZE, WQ.entry[index].pf_metadata);
+			cpu = 0;
+		      }
 
                     // update replacement policy
                     if (cache_type == IS_LLC) {
                         llc_update_replacement_state(writeback_cpu, set, way, WQ.entry[index].full_addr, WQ.entry[index].ip, block[set][way].full_addr, WQ.entry[index].type, 0);
+                    }
+                    else if (cache_type == IS_LLC4) {
+                        llc4_update_replacement_state(writeback_cpu, set, way, WQ.entry[index].full_addr, WQ.entry[index].ip, block[set][way].full_addr, WQ.entry[index].type, 0);
                     }
                     else
                         update_replacement_state(writeback_cpu, set, way, WQ.entry[index].full_addr, WQ.entry[index].ip, block[set][way].full_addr, WQ.entry[index].type, 0);
@@ -495,12 +532,22 @@ void CACHE::handle_read()
 			llc_prefetcher_operate(block[set][way].address<<LOG2_BLOCK_SIZE, RQ.entry[index].ip, 1, RQ.entry[index].type, 0);
 			cpu = 0;
 		      }
+                   else if (cache_type == IS_LLC4)
+		      {
+			cpu = read_cpu;
+			llc_prefetcher_operate(block[set][way].address<<LOG2_BLOCK_SIZE, RQ.entry[index].ip, 1, RQ.entry[index].type, 0);
+			cpu = 0;
+		      }
                 }
 
                 // update replacement policy
                 if (cache_type == IS_LLC) {
                     llc_update_replacement_state(read_cpu, set, way, block[set][way].full_addr, RQ.entry[index].ip, 0, RQ.entry[index].type, 1);
 
+                }
+                else if (cache_type == IS_LLC4) {
+                    llc4_update_replacement_state(read_cpu, set, way, block[set][way].full_addr, RQ.entry[index].ip, 0, RQ.entry[index].type, 1);
+                    block[set][way].valid = 0;
                 }
                 else
                     update_replacement_state(read_cpu, set, way, block[set][way].full_addr, RQ.entry[index].ip, 0, RQ.entry[index].type, 1);
@@ -549,6 +596,22 @@ void CACHE::handle_read()
 		  if(cache_type == IS_LLC)
 		    {
 		      // check to make sure the DRAM RQ has room for this LLC read miss
+		      if (lower_level->get_occupancy(1, RQ.entry[index].address) == lower_level->get_size(1, RQ.entry[index].address))
+			{
+			  miss_handled = 0;
+			}
+		      else
+			{
+			  add_mshr(&RQ.entry[index]);
+			  if(lower_level)
+			    {
+			      lower_level->add_rq(&RQ.entry[index]);
+			    }
+			}
+		    }
+            else if(cache_type == IS_LLC4)
+		    {
+		      // check to make sure the DRAM RQ has room for this LLC4 read miss
 		      if (lower_level->get_occupancy(1, RQ.entry[index].address) == lower_level->get_size(1, RQ.entry[index].address))
 			{
 			  miss_handled = 0;
@@ -687,6 +750,12 @@ void CACHE::handle_read()
 			    llc_prefetcher_operate(RQ.entry[index].address<<LOG2_BLOCK_SIZE, RQ.entry[index].ip, 0, RQ.entry[index].type, 0);
 			    cpu = 0;
 			  }
+                        if (cache_type == IS_LLC4)
+			  {
+			    cpu = read_cpu;
+			    llc_prefetcher_operate(RQ.entry[index].address<<LOG2_BLOCK_SIZE, RQ.entry[index].ip, 0, RQ.entry[index].type, 0);
+			    cpu = 0;
+			  }
                     }
 
                     MISS[RQ.entry[index].type]++;
@@ -735,6 +804,9 @@ void CACHE::handle_prefetch()
                     llc_update_replacement_state(prefetch_cpu, set, way, block[set][way].full_addr, PQ.entry[index].ip, 0, PQ.entry[index].type, 1);
 
                 }
+                else if (cache_type == IS_LLC4) {
+                    llc4_update_replacement_state(prefetch_cpu, set, way, block[set][way].full_addr, PQ.entry[index].ip, 0, PQ.entry[index].type, 1);
+                }
                 else
                     update_replacement_state(prefetch_cpu, set, way, block[set][way].full_addr, PQ.entry[index].ip, 0, PQ.entry[index].type, 1);
 
@@ -750,6 +822,12 @@ void CACHE::handle_prefetch()
                     else if (cache_type == IS_L2C)
                       PQ.entry[index].pf_metadata = l2c_prefetcher_operate(block[set][way].address<<LOG2_BLOCK_SIZE, PQ.entry[index].ip, 1, PREFETCH, PQ.entry[index].pf_metadata);
                     else if (cache_type == IS_LLC)
+		      {
+			cpu = prefetch_cpu;
+			PQ.entry[index].pf_metadata = llc_prefetcher_operate(block[set][way].address<<LOG2_BLOCK_SIZE, PQ.entry[index].ip, 1, PREFETCH, PQ.entry[index].pf_metadata);
+			cpu = 0;
+		      }
+                    else if (cache_type == IS_LLC4)
 		      {
 			cpu = prefetch_cpu;
 			PQ.entry[index].pf_metadata = llc_prefetcher_operate(block[set][way].address<<LOG2_BLOCK_SIZE, PQ.entry[index].ip, 1, PREFETCH, PQ.entry[index].pf_metadata);
@@ -804,6 +882,29 @@ void CACHE::handle_prefetch()
 			  if(PQ.entry[index].pf_origin_level < fill_level)
 			    {
 			      if (cache_type == IS_LLC)
+				{
+				  cpu = prefetch_cpu;
+				  PQ.entry[index].pf_metadata = llc_prefetcher_operate(PQ.entry[index].address<<LOG2_BLOCK_SIZE, PQ.entry[index].ip, 0, PREFETCH, PQ.entry[index].pf_metadata);
+				  cpu = 0;
+				}
+			    }
+			  
+			  // add it to MSHRs if this prefetch miss will be filled to this cache level
+			  if (PQ.entry[index].fill_level <= fill_level)
+			    add_mshr(&PQ.entry[index]);
+
+			  lower_level->add_rq(&PQ.entry[index]); // add it to the DRAM RQ
+			}
+		      }
+              else if (cache_type == IS_LLC4) {
+			if (lower_level->get_occupancy(1, PQ.entry[index].address) == lower_level->get_size(1, PQ.entry[index].address))
+			  miss_handled = 0;
+			else {
+			  
+			  // run prefetcher on prefetches from higher caches
+			  if(PQ.entry[index].pf_origin_level < fill_level)
+			    {
+			      if (cache_type == IS_LLC4)
 				{
 				  cpu = prefetch_cpu;
 				  PQ.entry[index].pf_metadata = llc_prefetcher_operate(PQ.entry[index].address<<LOG2_BLOCK_SIZE, PQ.entry[index].ip, 0, PREFETCH, PQ.entry[index].pf_metadata);
@@ -950,7 +1051,7 @@ void CACHE::fill_cache(uint32_t set, uint32_t way, PACKET *packet)
 
     if (block[set][way].valid == 0)
         block[set][way].valid = 1;
-    block[set][way].dirty = 0;
+    block[set][way].dirty = packet->dirty;
     block[set][way].prefetch = (packet->type == PREFETCH) ? 1 : 0;
     block[set][way].used = 0;
 

@@ -1,8 +1,8 @@
 #!/bin/bash
 
-if [ "$#" -ne 6 ]; then
+if [ "$#" -ne 7 ]; then
     echo "Illegal number of parameters"
-    echo "Usage: ./build_champsim.sh [branch_pred] [l1d_pref] [l2c_pref] [llc_pref] [llc_repl] [num_core]"
+    echo "Usage: ./build_champsim.sh [branch_pred] [l1d_pref] [l2c_pref] [llc_pref] [llc_repl] [llc4_repl] [num_core]"
     exit 1
 fi
 
@@ -12,7 +12,8 @@ L1D_PREFETCHER=$2   # prefetcher/*.l1d_pref
 L2C_PREFETCHER=$3   # prefetcher/*.l2c_pref
 LLC_PREFETCHER=$4   # prefetcher/*.llc_pref
 LLC_REPLACEMENT=$5  # replacement/*.llc_repl
-NUM_CORE=$6         # tested up to 8-core system
+LLC4_REPLACEMENT=$6  # replacement/*.llc4_repl
+NUM_CORE=$7         # tested up to 8-core system
 
 ############## Some useful macros ###############
 BOLD=$(tput bold)
@@ -55,6 +56,13 @@ if [ ! -f ./replacement/${LLC_REPLACEMENT}.llc_repl ]; then
     exit 1
 fi
 
+if [ ! -f ./replacement/${LLC4_REPLACEMENT}.llc4_repl ]; then
+    echo "[ERROR] Cannot find LLC4 replacement policy"
+	echo "[ERROR] Possible LLC4 replacement policy from replacement/*.llc4_repl"
+    find replacement -name "*.llc4_repl"
+    exit 1
+fi
+
 # Check num_core
 re='^[0-9]+$'
 if ! [[ $NUM_CORE =~ $re ]] ; then
@@ -84,6 +92,7 @@ cp prefetcher/${L1D_PREFETCHER}.l1d_pref prefetcher/l1d_prefetcher.cc
 cp prefetcher/${L2C_PREFETCHER}.l2c_pref prefetcher/l2c_prefetcher.cc
 cp prefetcher/${LLC_PREFETCHER}.llc_pref prefetcher/llc_prefetcher.cc
 cp replacement/${LLC_REPLACEMENT}.llc_repl replacement/llc_replacement.cc
+cp replacement/${LLC4_REPLACEMENT}.llc4_repl replacement/llc4_replacement.cc
 
 # Build
 mkdir -p bin
@@ -105,8 +114,9 @@ echo "L1D Prefetcher: ${L1D_PREFETCHER}"
 echo "L2C Prefetcher: ${L2C_PREFETCHER}"
 echo "LLC Prefetcher: ${LLC_PREFETCHER}"
 echo "LLC Replacement: ${LLC_REPLACEMENT}"
+echo "LLC4 Replacement: ${LLC4_REPLACEMENT}"
 echo "Cores: ${NUM_CORE}"
-BINARY_NAME="${BRANCH}-${L1D_PREFETCHER}-${L2C_PREFETCHER}-${LLC_PREFETCHER}-${LLC_REPLACEMENT}-${NUM_CORE}core"
+BINARY_NAME="${BRANCH}-${L1D_PREFETCHER}-${L2C_PREFETCHER}-${LLC_PREFETCHER}-${LLC_REPLACEMENT}-${LLC4_REPLACEMENT}-${NUM_CORE}core"
 echo "Binary: bin/${BINARY_NAME}"
 echo ""
 mv bin/champsim bin/${BINARY_NAME}
@@ -122,3 +132,4 @@ cp prefetcher/no.l1d_pref prefetcher/l1d_prefetcher.cc
 cp prefetcher/no.l2c_pref prefetcher/l2c_prefetcher.cc
 cp prefetcher/no.llc_pref prefetcher/llc_prefetcher.cc
 cp replacement/lru.llc_repl replacement/llc_replacement.cc
+cp replacement/lru.llc4_repl replacement/llc4_replacement.cc

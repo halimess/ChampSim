@@ -92,7 +92,8 @@ class PACKET {
              store_merged,
              returned,
              asid[2],
-             type;
+             type,
+             dirty;
 
     fastset
              rob_index_depend_on_me, 
@@ -124,6 +125,7 @@ class PACKET {
         asid[0] = UINT8_MAX;
         asid[1] = UINT8_MAX;
         type = 0;
+        dirty = 0;
 
         fill_level = -1; 
         rob_signal = -1;
